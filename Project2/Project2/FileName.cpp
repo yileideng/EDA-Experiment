@@ -26,11 +26,21 @@ public:
     Type type;
     // 节点名称
     string name;
-    // 是否已调度
-    bool processed = false;
 
+    // 调度开始周期，-1表示未调度
     int startCycle = -1;
 
+    int getEndCycle() {
+        if (type == AND) {
+            return startCycle + 1;
+        }
+        else if (type == OR) {
+            return startCycle + 1;
+        }
+        else if (type == NOT) {
+            return startCycle + 1;
+        }
+    }
     Node(string nodeName) : name(nodeName), type(DEFAULT) {}
     Node() {}
 };
@@ -39,33 +49,18 @@ class Graph {
 public:
     // 节点集
     map<string, Node*> nodes;
-    // 记录每个周期的调度节点集
-    vector<vector<Node*>> cycles;
+
     // 图的大小
     int size;
     // 已调度节点的数量
     int processCount;
 
-    // 向调度节点集添加节点
-    void addVector(int cycleIndex, Node* node) {
-        if (cycleIndex >= cycles.size()) {
-            cycles.resize(cycleIndex + 1);
-        }
-        cycles[cycleIndex].push_back(node);
-    }
-
     // 清空调度状态
     void clear() {
         for (auto& pair : nodes) {
-            pair.second->processed = false;
             pair.second->startCycle = -1;
         }
         processCount = 0;
-
-        for (vector<Node*> cycle : cycles) {
-            cycle.clear();
-        }
-        cycles.clear();
     }
 
     // 初始化图
@@ -75,8 +70,111 @@ public:
     }
 };
 
+// ASAP算法，返回周期数
+int ASAP(Graph& g) {
+
+    // 每次循环是一个周期
+    int cycleIndex = 0;
+    while (g.processCount < g.size) {
+        // 当前周期的调度节点集
+        vector<Node*> processingNodes;
+
+        // 查找当前周期可以调度的节点
+        for (auto& pair : g.nodes) {
+            Node* currentNode = pair.second;
+
+            // 跳过已调度节点
+            if (currentNode->startCycle != -1) {
+                continue;
+            }
+
+            // 表示前驱节点是否已全部调度过
+            bool preProcessFinished = true;
+            // 检查非输入节点的前驱
+            if (!currentNode->pre.empty()) {
+                for (Node* n : currentNode->pre) {
+                    // 存在前驱节点未调度;或前驱节点已调度，但还未执行完
+                    if (n->startCycle == -1 || (n->startCycle != -1 && (n->getEndCycle() > cycleIndex))) {
+                        preProcessFinished = false;
+                        break;
+                    }
+                }
+            }
+
+            // 只有当前驱节点全部调度完成的节点才加入当前周期
+            if (preProcessFinished) {
+                processingNodes.push_back(currentNode);
+            }
+        }
+
+        std::cout << cycleIndex;
+        // 调度当前周期的节点
+        for (Node* node : processingNodes) {
+            node->startCycle = cycleIndex;
+            g.processCount++;
+            std::cout << "" << node->name;
+        }
+        std::cout << endl;
+        cycleIndex++;
+    }
+
+    return cycleIndex;
+}
+
+// ALAP算法
+void ALAP(Graph& g, int requiredCycle) {
+
+    // 每次循环是一个周期
+    while (g.processCount < g.size) {
+        // 当前周期的调度节点集
+        vector<Node*> processingNodes;
+
+        // 查找当前周期可以调度的节点
+        for (auto& pair : g.nodes) {
+            Node* currentNode = pair.second;
+
+            // 跳过已调度节点
+            if (currentNode->startCycle != -1) {
+                continue;
+            }
+
+            // 表示后继节点是否已全部调度过
+            bool nextProcessed = true;
+            // 检查非输出节点的后继
+            if (!currentNode->next.empty()) {
+                for (Node* n : currentNode->next) {
+                    // 存在后继节点未调度，则不调度该节点
+                    if (n->startCycle == -1) {
+                        nextProcessed = false;
+                        break;
+                    }
+                }
+            }
+
+            // 只有当前驱节点全部调度完成的节点才加入当前周期
+            if (nextProcessed) {
+                processingNodes.push_back(currentNode);
+            }
+        }
+
+        // 如果没有可处理的节点，说明图中存在循环依赖
+        if (processingNodes.empty()) {
+            std::cerr << "Error: Graph contains a cycle." << std::endl;
+            break;
+        }
+
+        // 调度当前周期的节点
+        for (Node* node : processingNodes) {
+            g.processCount++;
+        }
+        requiredCycle--;
+    }
+
+    return;
+}
 // 处理输入，初始化图
-void processInput(Graph& g, vector<std::string> blifContent, int size) {
+void processInput(Graph& g, vector<std::string> blifContent) {
+    int size = blifContent.size();
     int index = 0;
     while (index++ < size) {
         string line = blifContent[index];
@@ -203,37 +301,52 @@ void processInput(Graph& g, vector<std::string> blifContent, int size) {
     }
 }
 
-// 打印一个调度周期的节点集
-void printNodes(vector<Node*> nodes) {
-    for (int nodeType = 0; nodeType < 3; nodeType++) {
-        std::cout << "{ ";
-        for (Node* node : nodes) {
-            // AND,OR,NOT
-            if (node->type == (Type)nodeType){
-                std::cout << node->name + " ";
+// 打印所有调度周期
+void printCycles(Graph& g) {
+    // 找到最大周期
+    int totalCycles = 0;
+    for (auto& pair : g.nodes) {
+        totalCycles = totalCycles > pair.second->startCycle ? totalCycles : pair.second->startCycle;
+    }
+    std::cout << "Total " << totalCycles - 1 << " Cycles" << endl;
+
+    // 找到每个周期的节点
+    for (int i = 1; i <= totalCycles; i++) {
+        std::cout << "Cycle " << i << ":";
+        vector<Node*> andNodes, orNodes, notNodes;
+        // 遍历节点，找第i周期开始的节点
+        for (auto& pair : g.nodes) {
+            Node* n = pair.second;
+            if (n->startCycle == i) {
+                if (n->type == AND) {
+                    andNodes.push_back(n);
+                }else if (n->type == OR) {
+                    andNodes.push_back(n);
+                } else if (n->type == NOT) {
+                    andNodes.push_back(n);
+                }
             }
         }
-        std::cout << "},";
-    }
-}
-// 打印所有调度周期
-void printCycles(vector<vector<Node*>> cycles) {
-    std::cout << "Total " << cycles.size() - 1 << " Cycles" << endl;
 
-    int index = 0;   
-    for (vector<Node*> cycle : cycles) {
-        if (cycle.empty()) {
-            index++;
-            continue;
+        std::cout << "{ ";
+        for (Node* n : andNodes) {  
+            std::cout << n->name + " ";
         }
-        if (cycle.front()->type == INPUT) {
-            index++;
-            continue;
+        std::cout << "} ";
+
+        std::cout << "{ ";
+        for (Node* n : orNodes) {
+            std::cout << n->name + " ";
         }
-        std::cout << "Cycle " << index << ":";
-        printNodes(cycle);
+        std::cout << "} ";
+
+        std::cout << "{ ";
+        for (Node* n : notNodes) {
+            std::cout << n->name + " ";
+        }
+        std::cout << "} ";
+
         std::cout << endl;
-        index++;
     }
 }
 // 打印输入输出节点
@@ -298,114 +411,7 @@ void printGraph(Graph& g) {
     }
 }
 
-// ASAP算法，返回周期数
-int ASAP(Graph& g) {
-  
-    // 每次循环是一个周期
-    int cycleIndex = 0;
-    while (g.processCount < g.size) {
-        // 当前周期的调度节点集
-        vector<Node*> processingNodes;
 
-        // 查找当前周期可以调度的节点
-        for (auto& pair : g.nodes) {
-            Node* currentNode = pair.second;
-
-            // 跳过已调度节点
-            if (currentNode->processed) { 
-                continue;
-            }
-
-            // 表示前驱节点是否已全部调度过
-            bool preProcessed = true;
-            // 检查非输入节点的前驱
-            if (!currentNode->pre.empty()) {
-                for (Node* n : currentNode->pre) {
-                    // 存在前驱节点未调度，则不调度该节点
-                    if (!n->processed) { 
-                        preProcessed = false;
-                        break;
-                    }
-                }
-            }
-
-            // 只有当前驱节点全部调度完成的节点才加入当前周期
-            if (preProcessed) { 
-                processingNodes.push_back(currentNode);
-            }
-        }
-
-        // 如果没有可处理的节点，说明图中存在循环依赖
-        if (processingNodes.empty()) {
-            std::cerr << "Error: Graph contains a cycle." << std::endl;
-            break;
-        }
-
-        // 调度当前周期的节点
-        for (Node* node : processingNodes) {
-            g.addVector(cycleIndex, node);
-            node->processed = true;
-            g.processCount++;
-        }
-        cycleIndex++;
-    }
-
-    return cycleIndex;
-}
-
-// ALAP算法
-void ALAP(Graph& g, int requiredCycle) {
-
-    // 每次循环是一个周期
-    while (g.processCount < g.size) {
-        // 当前周期的调度节点集
-        vector<Node*> processingNodes;
-
-        // 查找当前周期可以调度的节点
-        for (auto& pair : g.nodes) {
-            Node* currentNode = pair.second;
-
-            // 跳过已调度节点
-            if (currentNode->processed) {
-                continue;
-            }
-
-            // 表示后继节点是否已全部调度过
-            bool nextProcessed = true;
-            // 检查非输出节点的后继
-            if (!currentNode->next.empty()) {
-                for (Node* n : currentNode->next) {
-                    // 存在后继节点未调度，则不调度该节点
-                    if (!n->processed) {
-                        nextProcessed = false;
-                        break;
-                    }
-                }
-            }
-
-            // 只有当前驱节点全部调度完成的节点才加入当前周期
-            if (nextProcessed) {
-                processingNodes.push_back(currentNode);
-            }
-        }
-
-        // 如果没有可处理的节点，说明图中存在循环依赖
-        if (processingNodes.empty()) {
-            std::cerr << "Error: Graph contains a cycle." << std::endl;
-            break;
-        }
-
-        // 调度当前周期的节点
-        for (Node* node : processingNodes) {
-            g.addVector(requiredCycle, node);
-            node->processed = true;
-            g.processCount++;
-        }
-        requiredCycle--;
-    }
-
-    return;
-}
 
 int main() {
     std::ifstream file("./sample.blif");
@@ -424,7 +430,7 @@ int main() {
     Graph* g = new Graph();
 
     // 处理输入，初始化图 
-    processInput(*g, blifContent, sizeof(blifContent));
+    processInput(*g, blifContent);
     // 打印图中的所有节点
     printGraph(*g);
 
@@ -432,13 +438,13 @@ int main() {
     int minCycles = ASAP(*g);
     // 打印ASAP执行结果
     printInOut(*g);
-    printCycles(g->cycles);
+    printCycles(*g);
 
     // 执行ALAP算法
-    ALAP(*g, minCycles+5);
+    //ALAP(*g, minCycles+5);
     // 打印ALAP执行结果
-    printInOut(*g);
-    printCycles(g->cycles);
+    //printInOut(*g);
+
 
     // 重置调度状态
     g->clear();
