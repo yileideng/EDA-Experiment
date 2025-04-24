@@ -28,7 +28,7 @@ public:
     string name;
 
     // 调度开始周期，-1表示未调度
-    int startCycle = -1;
+    int startCycle;
 
     int getEndCycle() {
         if (type == AND) {
@@ -41,8 +41,12 @@ public:
             return startCycle + 1;
         }
     }
-    Node(string nodeName) : name(nodeName), type(DEFAULT) {}
-    Node() {}
+    Node(string nodeName) : name(nodeName), type(DEFAULT) {
+        startCycle = -1;
+    }
+    Node() {
+        startCycle = -1;
+    }
 };
 
 class Graph {
@@ -94,7 +98,8 @@ int ASAP(Graph& g) {
             if (!currentNode->pre.empty()) {
                 for (Node* n : currentNode->pre) {
                     // 存在前驱节点未调度;或前驱节点已调度，但还未执行完
-                    if (n->startCycle == -1 || (n->startCycle != -1 && (n->getEndCycle() > cycleIndex))) {
+                    //if ((n->startCycle == -1) || ((n->startCycle != -1) && (n->getEndCycle() > cycleIndex))) {
+                    if (n->startCycle == -1) {
                         preProcessFinished = false;
                         break;
                     }
@@ -107,14 +112,13 @@ int ASAP(Graph& g) {
             }
         }
 
-        std::cout << cycleIndex;
-        // 调度当前周期的节点
-        for (Node* node : processingNodes) {
-            node->startCycle = cycleIndex;
-            g.processCount++;
-            std::cout << "" << node->name;
+        if (!processingNodes.empty()) {
+            // 调度当前周期的节点
+            for (Node* node : processingNodes) {
+                node->startCycle = cycleIndex;
+                g.processCount++;
+            }
         }
-        std::cout << endl;
         cycleIndex++;
     }
 
@@ -140,7 +144,7 @@ void ALAP(Graph& g, int requiredCycle) {
 
             // 表示后继节点是否已全部调度过
             bool nextProcessed = true;
-            // 检查非输出节点的后继
+            // 若不是输出节点，才判断其后继节点是否调度
             if (!currentNode->next.empty()) {
                 for (Node* n : currentNode->next) {
                     // 存在后继节点未调度，则不调度该节点
@@ -151,26 +155,22 @@ void ALAP(Graph& g, int requiredCycle) {
                 }
             }
 
-            // 只有当前驱节点全部调度完成的节点才加入当前周期
+            // 只有当后继节点全部调度完成的节点才加入当前周期
             if (nextProcessed) {
                 processingNodes.push_back(currentNode);
             }
         }
 
-        // 如果没有可处理的节点，说明图中存在循环依赖
-        if (processingNodes.empty()) {
-            std::cerr << "Error: Graph contains a cycle." << std::endl;
-            break;
-        }
-
         // 调度当前周期的节点
-        for (Node* node : processingNodes) {
-            g.processCount++;
+        if (!processingNodes.empty()) {
+            // 调度当前周期的节点
+            for (Node* node : processingNodes) {
+                node->startCycle = requiredCycle;
+                g.processCount++;
+            }
         }
         requiredCycle--;
     }
-
-    return;
 }
 // 处理输入，初始化图
 void processInput(Graph& g, vector<std::string> blifContent) {
@@ -218,9 +218,9 @@ void processInput(Graph& g, vector<std::string> blifContent) {
             // 偏移量
             int offset = 1;
             // 下一行
-            string nextLine = blifContent[index + offset];  
+            string nextLine = blifContent[index + offset];
 
-            while (index + offset < size) { 
+            while (index + offset < size) {
                 if (nextLine.find(".names") != string::npos || nextLine.find(".inputs") != string::npos ||
                     nextLine.find(".outputs") != string::npos || nextLine.find(".model") != string::npos ||
                     nextLine.find(".end") != string::npos) {
@@ -308,7 +308,7 @@ void printCycles(Graph& g) {
     for (auto& pair : g.nodes) {
         totalCycles = totalCycles > pair.second->startCycle ? totalCycles : pair.second->startCycle;
     }
-    std::cout << "Total " << totalCycles - 1 << " Cycles" << endl;
+    std::cout << "Total " << totalCycles << " Cycles" << endl;
 
     // 找到每个周期的节点
     for (int i = 1; i <= totalCycles; i++) {
@@ -320,25 +320,27 @@ void printCycles(Graph& g) {
             if (n->startCycle == i) {
                 if (n->type == AND) {
                     andNodes.push_back(n);
-                }else if (n->type == OR) {
-                    andNodes.push_back(n);
-                } else if (n->type == NOT) {
-                    andNodes.push_back(n);
+                }
+                else if (n->type == OR) {
+                    orNodes.push_back(n);
+                }
+                else if (n->type == NOT) {
+                    notNodes.push_back(n);
                 }
             }
         }
 
         std::cout << "{ ";
-        for (Node* n : andNodes) {  
+        for (Node* n : andNodes) {
             std::cout << n->name + " ";
         }
-        std::cout << "} ";
+        std::cout << "},";
 
         std::cout << "{ ";
         for (Node* n : orNodes) {
             std::cout << n->name + " ";
         }
-        std::cout << "} ";
+        std::cout << "},";
 
         std::cout << "{ ";
         for (Node* n : notNodes) {
@@ -440,14 +442,18 @@ int main() {
     printInOut(*g);
     printCycles(*g);
 
-    // 执行ALAP算法
-    //ALAP(*g, minCycles+5);
-    // 打印ALAP执行结果
-    //printInOut(*g);
-
-
     // 重置调度状态
     g->clear();
+    std::cout << endl << endl;
+
+    // 执行ALAP算法
+    ALAP(*g, minCycles);
+    // 打印ALAP执行结果
+    printInOut(*g);
+    printCycles(*g);
+
+
+
 
 
     delete g;
