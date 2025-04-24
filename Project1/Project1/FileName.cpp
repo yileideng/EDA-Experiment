@@ -162,8 +162,12 @@ void ALAP(Graph& g, int requiredCycle) {
         }
 
         // 调度当前周期的节点
-        for (Node* node : processingNodes) {
-            g.processCount++;
+        if (!processingNodes.empty()) {
+            // 调度当前周期的节点
+            for (Node* node : processingNodes) {
+                node->startCycle = requiredCycle;
+                g.processCount++;
+            }
         }
         requiredCycle--;
     }
