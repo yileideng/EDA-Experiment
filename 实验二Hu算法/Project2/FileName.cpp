@@ -28,6 +28,8 @@ public:
     int startCycle;
     // 操作执行时间
     int executionTime;
+    // alap的节点开始时间
+    int alapStartCycle;
 
     int getEndCycle() {
         return startCycle + executionTime;
@@ -65,11 +67,17 @@ public:
     }
 };
 
+vector<Node*> getUnprocessedNodes(Graph& g, int currentCycle);
+vector<Node*> getProcessingNodes(vector<Node*> unprocessedNode, int resource);
+int getCurrentCycleProcessingCounts(Graph& g, int currentCycle);
+
 // ASAP算法，返回周期数
 int ASAP(Graph& g) {
     // 每次循环是一个周期
     int currentCycle = 0;
-    while (g.processCount < g.size) {
+    // 已调度节点的数量
+    int processCount = 0;
+    while (processCount < g.size) {
         // 当前周期的调度节点集
         vector<Node*> processingNodes;
 
@@ -108,7 +116,7 @@ int ASAP(Graph& g) {
         if (!processingNodes.empty()) {
             for (Node* node : processingNodes) {
                 node->startCycle = currentCycle;
-                g.processCount++;
+                processCount++;
             }
         }
         currentCycle++;
@@ -128,7 +136,9 @@ void ALAP(Graph& g, int requiredCycle) {
 
     // 每次循环是一个周期,周期从后往前推
     int currentCycle = requiredCycle; 
-    while (g.processCount < g.size) {
+    // 已调度节点的数量
+    int processCount = 0;
+    while (processCount < g.size) {
         // 维护当前周期的调度节点集
         vector<Node*> processingNodes;
 
@@ -166,11 +176,122 @@ void ALAP(Graph& g, int requiredCycle) {
         if (!processingNodes.empty()) {
             for (Node* node : processingNodes) {
                 node->startCycle = currentCycle;
-                g.processCount++;
+                node->alapStartCycle = currentCycle;
+                processCount++;
             }
         }
         currentCycle--;
     }
+}
+
+// Hu算法，返回周期数
+int Hu(Graph& g, int resource) {
+    // 每次循环是一个周期
+    int currentCycle = 0;
+    // 已调度节点的数量
+    int processCount = 0;
+    while (processCount < g.size) {
+        // 当前周期的可以调度节点集
+        vector<Node*> unprocessedNodes = getUnprocessedNodes(g, currentCycle);
+
+        if (unprocessedNodes.empty()) {
+            currentCycle++;
+            continue;
+        }
+
+        // 获取当前周期正在调度的节点数
+        int processingCounts = getCurrentCycleProcessingCounts(g, currentCycle);
+
+        // 确定调度节点集
+        vector<Node*> processingNodes = getProcessingNodes(unprocessedNodes, resource - processingCounts);
+
+        if (processingNodes.empty()) {
+            currentCycle++;
+            continue;
+        }
+
+        // 调度当前周期的节点
+        if (!processingNodes.empty()) {
+            for (Node* node : processingNodes) {
+                node->startCycle = currentCycle;
+                processCount++;
+            }
+        }
+        currentCycle++;
+    }
+
+    return currentCycle - 1;
+}
+
+// 未调度且前驱节点已调度完成的节点集U
+vector<Node*> getUnprocessedNodes(Graph& g, int currentCycle) {
+    // 可调度节点集U
+    vector<Node*> unprocessedNodes;
+    for (auto& pair : g.nodes) {
+        Node* currentNode = pair.second;
+
+        // 跳过已调度节点
+        if (currentNode->startCycle != -1) {
+            continue;
+        }
+
+        // 表示前驱节点是否已全部调度过
+        bool preProcessFinished = true;
+        int maxPreEndCycle = 0;
+        // 检查非输入节点的前驱
+        if (!currentNode->pre.empty()) {
+            for (Node* n : currentNode->pre) {
+                // 存在前驱节点未调度
+                if (n->startCycle == -1) {
+                    preProcessFinished = false;
+                    break;
+                }
+                // 更新最大前驱结束周期
+                maxPreEndCycle = max(maxPreEndCycle, n->getEndCycle());
+            }
+        }
+
+        // 如果有前驱节点未调度，或当前周期小于最大前驱结束周期的节点
+        if (!preProcessFinished || currentCycle < maxPreEndCycle) {
+            continue;
+        }
+
+        unprocessedNodes.push_back(currentNode);
+    }
+    return unprocessedNodes;
+}
+
+// 获取最早调度节点集S
+vector<Node*> getProcessingNodes(vector<Node*> unprocessedNode, int resource) {
+    // 最早调度节点集S
+    vector<Node*> processingNodes;
+
+    while (!unprocessedNode.empty() && processingNodes.size() < resource) {
+        // 获取可调度节点集里的最早调度节点
+        Node* minNode = unprocessedNode[0];
+        for (Node* node : unprocessedNode) {
+            if (node->alapStartCycle < minNode->alapStartCycle) {
+                minNode = node;
+            }
+        }
+        processingNodes.push_back(minNode);
+
+        // 使用标准库算法安全移除minNode
+        auto it = std::remove(unprocessedNode.begin(), unprocessedNode.end(), minNode);
+        unprocessedNode.erase(it, unprocessedNode.end());
+    }
+    return processingNodes;
+}
+// 获取当前周期正在调度的节点数
+int getCurrentCycleProcessingCounts(Graph& g, int currentCycle) {
+    int counts = 0;
+    for (auto& pair : g.nodes) {
+        Node* currentNode = pair.second;
+        if (currentNode->startCycle!=-1 && currentNode->getEndCycle() > currentCycle) {
+            counts++;
+        }
+    }
+    return counts;
 }
 
 // 处理输入，初始化图
@@ -315,12 +436,12 @@ void printCycles(Graph& g) {
         Node* current = pair.second;
         totalCycles = totalCycles > current->startCycle + current->executionTime - 1 ? totalCycles : current->startCycle + current->executionTime - 1;
     }
-    std::cout << "Total " << totalCycles << " Cycles" << endl;
+    std::cout << "Total " << totalCycles+1 << " Cycles" << endl;
 
     // 找到每个周期的节点
-    for (int i = 1; i <= totalCycles; i++) {
+    for (int i = 0; i <= totalCycles; i++) {
         std::cout << "Cycle " << i << ":";
-        vector<Node*> andNodes, orNodes, notNodes;
+        vector<Node*> andNodes, orNodes, notNodes, inputNodes;
         // 遍历节点，找第i周期开始的节点
         for (auto& pair : g.nodes) {
             Node* n = pair.second;
@@ -334,8 +455,16 @@ void printCycles(Graph& g) {
                 else if (n->type == NOT) {
                     notNodes.push_back(n);
                 }
+                else if (n->type == INPUT) {
+                    inputNodes.push_back(n);
+                }
             }
         }
+        std::cout << "{ ";
+        for (Node* n : inputNodes) {
+            std::cout << n->name + " ";
+        }
+        std::cout << "},";
 
         std::cout << "{ ";
         for (Node* n : andNodes) {
@@ -417,6 +546,7 @@ void printGraph(Graph& g) {
         default:
             std::cout << "DEFAULT" << endl;
         }
+        std::cout << "开始调度时间" << pair.second->startCycle << endl;
         std::cout << "执行时间: " << pair.second->executionTime << endl;
         std::cout << endl << endl;
     }
@@ -456,6 +586,16 @@ int main() {
     // 执行ALAP算法
     ALAP(*g, 9);
     // 打印ALAP执行结果
+    printInOut(*g);
+    printCycles(*g);
+
+    // 重置调度状态
+    g->clear();
+    std::cout << endl << endl;
+
+    // 执行Hu算法
+    Hu(*g, 20);
+    // 打印Hu算法执行结果
     printInOut(*g);
     printCycles(*g);
 
