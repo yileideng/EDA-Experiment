@@ -49,21 +49,17 @@ public:
     map<string, Node*> nodes;
     // 图的大小
     int size;
-    // 已调度节点的数量
-    int processCount;
 
     // 清空调度状态
     void clear() {
         for (auto& pair : nodes) {
             pair.second->startCycle = -1;
         }
-        processCount = 0;
     }
 
     // 初始化图
     Graph() : size(0) {
         size = 0;
-        processCount = 0;
     }
 };
 
@@ -362,12 +358,12 @@ void processInput(Graph& g, vector<std::string> blifContent) {
             // AND
             if (offset == 2) {
                 type = AND;
-                g.nodes[output]->executionTime = 2; 
+                g.nodes[output]->executionTime = 1; 
             }
             // OR
             if (offset > 2) {
                 type = OR;
-                g.nodes[output]->executionTime = 3; 
+                g.nodes[output]->executionTime = 1; 
             }
             g.nodes[output]->type = type;
             continue;
@@ -573,9 +569,10 @@ int main() {
     // 打印图中的所有节点
     printGraph(*g);
 
-    // 执行ALAP算法
+    // 执行ASAP算法
     int minCycles = ASAP(*g);
     // 打印ASAP执行结果
+    cout << "ASAP:" << endl;
     printInOut(*g);
     printCycles(*g);
 
@@ -583,19 +580,11 @@ int main() {
     g->clear();
     std::cout << endl << endl;
 
-    // 执行ALAP算法
-    ALAP(*g, 9);
-    // 打印ALAP执行结果
-    printInOut(*g);
-    printCycles(*g);
-
-    // 重置调度状态
-    g->clear();
-    std::cout << endl << endl;
-
+    int resource = 4;
     // 执行Hu算法
-    Hu(*g, 20);
+    Hu(*g, resource);
     // 打印Hu算法执行结果
+    cout << "Hu (" << "resources：" << resource << ")" << endl;
     printInOut(*g);
     printCycles(*g);
 
