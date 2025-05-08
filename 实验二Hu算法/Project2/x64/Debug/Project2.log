@@ -1,0 +1,5 @@
+﻿  FileName.cpp
+C:\Users\18101\Desktop\文档\EDA\EDA2\实验一ASAP\Project2\Project2\FileName.cpp(178,14): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
+  Project2.vcxproj -> C:\Users\18101\Desktop\文档\EDA\EDA2\实验一ASAP\Project2\x64\Debug\Project2.exe
+  'pwsh.exe' 不是内部或外部命令，也不是可运行的程序
+  或批处理文件。
