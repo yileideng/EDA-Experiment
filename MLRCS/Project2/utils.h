@@ -9,3 +9,5 @@ void printCycles(Graph& g);
 void printInOut(Graph& g);
 // 打印图的信息
 void printGraph(Graph& g);
+// 将枚举转换为字符串
+std::string typeToString(Type type);

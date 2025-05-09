@@ -68,12 +68,12 @@ void processInput(Graph& g, vector<std::string> blifContent) {
             // AND
             if (offset == 2) {
                 type = AND;
-                g.nodes[output]->executionTime = 1;
+                g.nodes[output]->executionTime = 2;
             }
             // OR
             if (offset > 2) {
                 type = OR;
-                g.nodes[output]->executionTime = 1;
+                g.nodes[output]->executionTime = 3;
             }
             g.nodes[output]->type = type;
             continue;
@@ -123,10 +123,6 @@ void processInput(Graph& g, vector<std::string> blifContent) {
                     g.size++;
                 }
             }
-        }
-        else if (line.find(".model") != string::npos) {
-            // 模型信息
-            std::cout << "模型名称：" << line.substr(line.find(" ") + 1) << endl;
         }
         else if (line.find(".end") != string::npos) {
             break;
@@ -192,6 +188,7 @@ void printCycles(Graph& g) {
 
         std::cout << endl;
     }
+    std::cout << endl << endl;
 }
 
 // 打印输入输出节点
@@ -255,5 +252,15 @@ void printGraph(Graph& g) {
         std::cout << "开始调度时间：" << pair.second->startCycle << endl;
         std::cout << "执行时间: " << pair.second->executionTime << endl;
         std::cout << endl << endl;
+    }
+}
+
+std::string typeToString(Type type) {
+    switch (type) {
+    case AND: return "AND";
+    case OR: return "OR";
+    case NOT: return "NOT";
+    case INPUT: return "INPUT";
+    default: return "UNKNOWN";
     }
 }

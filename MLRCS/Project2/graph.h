@@ -28,8 +28,8 @@ public:
     int startCycle;
     // 操作执行时间
     int executionTime;
-    // alap的节点开始时间
-    int alapStartCycle;
+    // 节点调度优先级：alap的节点开始时间越早，优先级越高
+    int priority;
 
     int getEndCycle() {
         return startCycle + executionTime;
