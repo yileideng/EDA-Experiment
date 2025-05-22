@@ -13,10 +13,32 @@ public:
     ~Term() {} // 析构函数（配合手动释放内存）
 };
 
+// 迭代合并项，返回质蕴含项
+vector<Term*> getPrimeTerms(vector<Term*> terms);
 // 尝试合并两个蕴含项
 Term* merge(Term* aTerm, Term* bTerm);
 // 查看某个蕴含项是否以存在防止重复添加
 bool exist(Term* term, vector<Term*> terms);
+
+
+// 获取最小覆盖
+vector<Term*> getEssentialPrimeTerms(vector<vector<int>> form, vector<Term*> input, vector<Term*> primes);
+// 判断某一行是否只有一个1,并返回1所在列
+int onlyOne(vector<vector<int>> form, int line);
+// 判断某一行是否有1，并返回第1个1所在列
+int firstOne(vector<vector<int>> form, int line);
+// 某项是否被另一项覆盖
+bool cover(Term* coveredTerm, Term* coverTerm);
+// 判断input[line]是否被覆盖
+bool lineUsed(vector<vector<int>> form, int line);
+// 判断primes[column]是否使用
+bool columnUsed(vector<vector<int>> form, int column);
+// 删除第line行
+void deleteLine(vector<vector<int>>& form, int line);
+// 删除第column列
+void deleteColumn(vector<vector<int>>& form, int column);
+
+
 
 
 
@@ -70,7 +92,7 @@ bool exist(Term* term, vector<Term*> terms) {
 }
 
 // 迭代合并项，返回质蕴含项
-vector<Term*> genPrimeTerms(vector<Term*> terms) {
+vector<Term*> getPrimeTerms(vector<Term*> terms) {
     vector<Term*> primeTerms;
 
     do {
@@ -103,15 +125,146 @@ vector<Term*> genPrimeTerms(vector<Term*> terms) {
     return primeTerms;
 }
 
+// 某项是否被另一项覆盖
+bool cover(Term* coveredTerm, Term* coverTerm) {
+    string covered = coveredTerm->value;
+    string cover = coverTerm->value;
+    if (covered.size() != cover.size()) {
+        return false;
+    }
+    for (int i = 0; i < cover.size(); i++) {
+        if (covered[i] != cover[i] && cover[i] != '*') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 判断input[line]是否被覆盖
+bool lineUsed(vector<vector<int>> form, int line) {
+    for (int j = 0; j < form[line].size(); j++) {
+        if (form[line][j] != -1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 判断primes[column]是否使用
+bool columnUsed(vector<vector<int>> form, int column) {
+    for (int i = 0; i < form.size(); i++) {
+        if (form[i][column] != -1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 删除第line行
+void deleteLine(vector<vector<int>>& form, int line) {
+    for (int j = 0; j < form[line].size(); j++) {
+        form[line][j] = -1;
+    }
+
+}
+
+// 删除第column列
+void deleteColumn(vector<vector<int>>& form, int column) {
+    for (int i = 0; i < form.size(); i++) {
+        form[i][column] = -1;
+    }
+}
+
+// 判断某一行是否只有一个1,并返回1所在列
+int onlyOne(vector<vector<int>> form, int line) {
+    int count = 0;
+    int oneIndex = 0;
+    for (int j = 0; j < form[line].size(); j++) {
+        if (form[line][j] == 1) {
+            count++;
+            oneIndex = j;
+        }
+    }
+
+    if (count == 1) {
+        return oneIndex;
+    }
+
+    return -1; 
+}
+
+// 判断某一行是否有1，并返回第1个1所在列
+int firstOne(vector<vector<int>> form, int line) {
+    for (int j = 0; j < form[line].size(); j++) {
+        if (form[line][j] == 1) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+// 获取最小覆盖
+vector<Term*> getEssentialPrimeTerms(vector<vector<int>> form, vector<Term*> input, vector<Term*> primes) {
+    vector<Term*> essentialPrimes;
+    int coverCount = 0;
+
+    while (coverCount != input.size()) {
+        int oneColumn = -1;
+        int line = -1;
+
+        // 优先处理一行只有1个1
+        for (int i = 0; i < form.size(); i++) {
+            oneColumn = onlyOne(form, i);
+            if (oneColumn != -1) {
+                line = i;
+                break;
+            }
+        }
+        // 其次处理一行有多个1
+        if (oneColumn == -1) {
+            for (int i = 0; i < form.size(); i++) {
+                oneColumn = firstOne(form, i);
+                if (oneColumn != -1) {
+                    line = i;
+                    break;
+                }
+            }
+        }
+
+        if (oneColumn != -1) {
+            // 删除1所在行
+            deleteLine(form, line);
+            coverCount++;
+            // 遍历1所在列，若该列的某项为1，则删除某项1所在行
+            for (int j = 0; j < form.size(); j++) {
+                if (form[j][oneColumn] == 1) {
+                    deleteLine(form, j);
+                    coverCount++;
+                }
+            }
+            // 删除1所在列
+            deleteColumn(form, oneColumn);
+            essentialPrimes.push_back(primes[oneColumn]);
+        }
+    }
+
+    return essentialPrimes;
+}
+
 int main() {
     // 输入最小项（4变量，二进制形式）
+    //vector<Term*> input = {
+    //    new Term("0000"), new Term("1100"), new Term("1101"),
+    //    new Term("0011"), new Term("0111"), new Term("1111"), new Term("1011")
+    //};
+
     vector<Term*> input = {
-        new Term("0000"), new Term("1100"), new Term("1101"),
-        new Term("0011"), new Term("0111"), new Term("1111"), new Term("1011")
+       new Term("000"), new Term("001"), new Term("101"),
+       new Term("111"), new Term("110")
     };
 
     // 生成质蕴含项
-    vector<Term*> primes = genPrimeTerms(input);
+    vector<Term*> primes = getPrimeTerms(input);
 
     // 输出质蕴含项
     cout << "质蕴含项：" << endl;
@@ -119,6 +272,35 @@ int main() {
         cout << p->value << endl;
     }
 
+    // 初始化质蕴含项表
+    vector<vector<int>> form(input.size(), vector<int>(primes.size()));
+    for (int i = 0; i < input.size(); i++) {
+        for (int j = 0; j < primes.size(); j++) {
+            if (cover(input[i], primes[j])) {
+                form[i][j] = 1;
+            }
+            else {
+                form[i][j] = 0;
+            }
+        }
+    }
+
+    // 打印质蕴含项表
+    for (int i = 0; i < input.size(); i++) {
+        for (int j = 0; j < primes.size(); j++) {
+            cout << form[i][j] << " ";
+        }
+        cout << endl;
+    }
+
+    // 获取最小覆盖
+    vector<Term*> essentialPrimes = getEssentialPrimeTerms(form, input, primes);
+    
+    // 输出最小覆盖
+    cout << "最小覆盖：" << endl;
+    for (Term* t : essentialPrimes) {
+        cout << t->value << endl;
+    }
 
     return 0;
 }
