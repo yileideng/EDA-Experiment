@@ -2,6 +2,8 @@
 #include<vector>
 #include<string>
 #include<unordered_set>
+#include<fstream>
+#include<sstream>
 using namespace std;
 
 class Term {
@@ -13,14 +15,14 @@ public:
     ~Term() {} // 析构函数（配合手动释放内存）
 };
 
+// 从BLIF文件读取数据
+vector<Term*> readBlifFile(const string& filename);
 // 迭代合并项，返回质蕴含项
 vector<Term*> getPrimeTerms(vector<Term*> terms);
 // 尝试合并两个蕴含项
 Term* merge(Term* aTerm, Term* bTerm);
 // 查看某个蕴含项是否以存在防止重复添加
 bool exist(Term* term, vector<Term*> terms);
-
-
 // 获取最小覆盖
 vector<Term*> getEssentialPrimeTerms(vector<vector<int>> form, vector<Term*> input, vector<Term*> primes);
 // 判断某一行是否只有一个1,并返回1所在列
@@ -37,10 +39,8 @@ bool columnUsed(vector<vector<int>> form, int column);
 void deleteLine(vector<vector<int>>& form, int line);
 // 删除第column列
 void deleteColumn(vector<vector<int>>& form, int column);
-
-
-
-
+// 将二进制形式转换为字母形式
+string toLiteralForm(string binary, int numVariables);
 
 // 尝试合并两个蕴含项
 Term* merge(Term* aTerm, Term* bTerm) {
@@ -121,6 +121,7 @@ vector<Term*> getPrimeTerms(vector<Term*> terms) {
 
         terms = newTerms; // 下一轮合并的输入为新生成的项
     } while (!terms.empty()); // 无新项生成时终止
+    cout << endl;
 
     return primeTerms;
 }
@@ -165,7 +166,6 @@ void deleteLine(vector<vector<int>>& form, int line) {
     for (int j = 0; j < form[line].size(); j++) {
         form[line][j] = -1;
     }
-
 }
 
 // 删除第column列
@@ -190,7 +190,7 @@ int onlyOne(vector<vector<int>> form, int line) {
         return oneIndex;
     }
 
-    return -1; 
+    return -1;
 }
 
 // 判断某一行是否有1，并返回第1个1所在列
@@ -251,17 +251,135 @@ vector<Term*> getEssentialPrimeTerms(vector<vector<int>> form, vector<Term*> inp
     return essentialPrimes;
 }
 
-int main() {
-    // 输入最小项（4变量，二进制形式）
-    //vector<Term*> input = {
-    //    new Term("0000"), new Term("1100"), new Term("1101"),
-    //    new Term("0011"), new Term("0111"), new Term("1111"), new Term("1011")
-    //};
+// 将二进制形式转换为字母形式
+string toLiteralForm(string binary, int numVariables) {
+    string result = "";
+    char var = 'A';
 
-    vector<Term*> input = {
-       new Term("000"), new Term("001"), new Term("101"),
-       new Term("111"), new Term("110")
-    };
+    for (int i = 0; i < binary.size(); i++) {
+        if (binary[i] == '0') {
+            result += var;
+            result += '\'';
+        }
+        else if (binary[i] == '1') {
+            result += var;
+        }
+        var++;
+    }
+
+    if (result.empty()) {
+        result = "1"; // 如果没有变量，代表逻辑1
+    }
+
+    return result;
+}
+
+// 从BLIF文件读取数据
+vector<Term*> readBlifFile(const string& filename) {
+    vector<Term*> input;
+    ifstream file(filename);
+
+    if (!file.is_open()) {
+        cerr << "无法打开文件: " << filename << endl;
+        return input;
+    }
+
+    string line;
+    vector<string> inputs;
+    bool inNamesSection = false;
+    vector<string> cubes;
+
+    while (getline(file, line)) {
+        // 移除行首和行尾的空白字符
+        line.erase(0, line.find_first_not_of(" \t"));
+        line.erase(line.find_last_not_of(" \t") + 1);
+
+        // 跳过空行和注释
+        if (line.empty() || line[0] == '#') continue;
+
+        istringstream iss(line);
+        string token;
+        iss >> token;
+
+        if (token == ".model") {
+            // 模型名称，忽略
+        }
+        else if (token == ".inputs") {
+            // 读取输入变量
+            inputs.clear();
+            while (iss >> token) {
+                inputs.push_back(token);
+            }
+        }
+        else if (token == ".outputs") {
+            // 读取输出变量，暂时忽略
+        }
+        else if (token == ".names") {
+            // 开始读取逻辑函数
+            inNamesSection = true;
+            cubes.clear();
+
+            // 读取该函数的输入变量
+            vector<string> functionInputs;
+            while (iss >> token) {
+                functionInputs.push_back(token);
+            }
+        }
+        else if (token == ".end") {
+            // 文件结束
+            break;
+        }
+        else if (inNamesSection) {
+            // 读取立方体（minterms）
+            string cube = token;
+            string output;
+            iss >> output;
+
+            // 只处理输出为1的情况
+            if (output == "1") {
+                cubes.push_back(cube);
+            }
+        }
+    }
+
+    // 处理读取到的立方体
+    for (const string& cube : cubes) {
+        // 转换为二进制表示
+        string binary;
+        for (char c : cube) {
+            if (c == '0' || c == '1') {
+                binary += c;
+            }
+            else {
+                // 处理无关项（如'-'），暂时忽略
+                binary += '0'; // 简单处理，实际中可能需要更复杂的逻辑
+            }
+        }
+
+        if (!binary.empty()) {
+            input.push_back(new Term(binary));
+        }
+    }
+
+    file.close();
+    return input;
+}
+
+int main() {
+    vector<Term*> input;
+
+    // 从BLIF文件读取数据
+    input = readBlifFile("input.blif");
+
+    if (input.empty()) {
+        cerr << "未成功读取任何最小项，使用默认示例..." << endl;
+
+        // 使用默认示例
+        input = {
+            new Term("0000"), new Term("1100"), new Term("1101"),
+            new Term("0011"), new Term("0111"), new Term("1111"), new Term("1011")
+        };
+    }
 
     // 生成质蕴含项
     vector<Term*> primes = getPrimeTerms(input);
@@ -286,6 +404,7 @@ int main() {
     }
 
     // 打印质蕴含项表
+    cout << "\n质蕴含项表：" << endl;
     for (int i = 0; i < input.size(); i++) {
         for (int j = 0; j < primes.size(); j++) {
             cout << form[i][j] << " ";
@@ -295,12 +414,22 @@ int main() {
 
     // 获取最小覆盖
     vector<Term*> essentialPrimes = getEssentialPrimeTerms(form, input, primes);
-    
-    // 输出最小覆盖
-    cout << "最小覆盖：" << endl;
+
+    // 输出最小覆盖（二进制形式）
+    cout << "\n最小覆盖（二进制形式）：" << endl;
     for (Term* t : essentialPrimes) {
         cout << t->value << endl;
     }
 
+    // 输出最小覆盖（字母形式）
+    cout << "\n最小覆盖（字母形式）：" << endl;
+    cout << "F = ";
+    for (int i = 0; i < essentialPrimes.size();i++) {        
+        cout << toLiteralForm(essentialPrimes[i]->value, essentialPrimes[i]->value.size()) ;
+        if (i != essentialPrimes.size() - 1) {
+            cout << " + ";
+        }
+    }
+    cout << endl;
     return 0;
 }
